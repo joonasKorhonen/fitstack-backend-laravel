@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Lint, test, migrate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fitstack_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      APP_ENV: testing
+      APP_DEBUG: false
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: fitstack_ci
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: ci-secret-not-used-in-production-just-needs-to-be-256-bits-long
+      FILESYSTEM_DISK: local
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_pgsql
+          coverage: none
+
+      - name: Install dependencies
+        run: composer install --no-dev --prefer-dist --optimize-autoloader
+
+      - name: Apply migrations
+        run: php artisan migrate --force
+
+      - name: Lint (syntax check)
+        run: find app routes config database -name "*.php" | xargs php -l
+
+      - name: Run tests
+        run: php artisan test
