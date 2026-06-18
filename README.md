@@ -1,58 +1,171 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FitStack Backend (Laravel)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+[![CI](https://github.com/joonasKorhonen/fitstack-backend-laravel/actions/workflows/ci.yml/badge.svg)](https://github.com/joonasKorhonen/fitstack-backend-laravel/actions/workflows/ci.yml)
 
-## About Laravel
+Laravel 11 REST API for **FitStack**, a fitness tracking app where users log workouts (with sets, reps, weight, and intensity), define custom exercises, track meals with macronutrients, and manage their profile.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This is an alternative backend to [fitstack-backend](https://github.com/joonasKorhonen/fitstack-backend) (NestJS). Both backends share the same PostgreSQL database and expose an identical API — switching between them requires only a one-line change in the frontend's `.env`.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Tech Stack
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **Laravel 11** (PHP 8.3)
+- **PostgreSQL 16** via **Eloquent** ORM
+- **JWT** auth with refresh token rotation (`tymon/jwt-auth`)
+- **AWS S3** for profile picture storage
+- **AWS SES** for password reset emails
+- Validation via Laravel's built-in request validation
 
-## Learning Laravel
+## Features
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **Auth** — register, login, refresh tokens, logout, forgot/reset password
+- **Users** — profile fetch/update/delete, avatar upload (jpeg/png/webp, 5 MB max)
+- **Workouts** — log workouts with multiple sets, exercises, reps, weight, intensity, and notes
+- **Movements** — user-defined custom exercise library
+- **Meals** — track meals with calories, protein, carbs, fat
+- All routes (except `auth/*`) are JWT-protected
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Prerequisites
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+- PHP 8.3+
+- Composer
+- PostgreSQL 16 (shared with fitstack-backend, or standalone)
+- AWS account with:
+  - An S3 bucket for avatar uploads
+  - A verified SES sender identity for password reset emails
 
-## Agentic Development
+## Setup
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### 1. Install dependencies
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+### 2. Configure environment
 
-## Contributing
+```bash
+cp .env.example .env
+php artisan key:generate
+php artisan jwt:secret
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Required variables:
 
-## Code of Conduct
+| Variable                | Purpose                                                     |
+| ----------------------- | ----------------------------------------------------------- |
+| `DB_HOST`               | PostgreSQL host                                             |
+| `DB_DATABASE`           | Database name                                               |
+| `DB_USERNAME`           | Database user                                               |
+| `DB_PASSWORD`           | Database password                                           |
+| `JWT_SECRET`            | Secret for signing access tokens                            |
+| `AWS_ACCESS_KEY_ID`     | IAM user access key                                         |
+| `AWS_SECRET_ACCESS_KEY` | IAM user secret                                             |
+| `AWS_DEFAULT_REGION`    | AWS region for S3 & SES (e.g. `eu-north-1`)                 |
+| `AWS_BUCKET`            | S3 bucket name for avatar uploads                           |
+| `MAIL_FROM_ADDRESS`     | Verified SES sender address                                 |
+| `FRONTEND_URL`          | Frontend origin — used for CORS and password reset links    |
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### 3. Run migrations
 
-## Security Vulnerabilities
+If using an existing fitstack-backend database (tables already created by Prisma):
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan migrate --pretend   # verify nothing conflicts
+```
 
-## License
+Then mark the migrations as run without executing them:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```sql
+INSERT INTO migrations (migration, batch) VALUES
+  ('2024_01_01_000001_create_users_table', 1), ...
+```
+
+If starting from scratch:
+
+```bash
+php artisan migrate
+```
+
+### 4. Start the server
+
+```bash
+php artisan serve
+```
+
+The API listens on `http://localhost:8000/api` by default.
+
+## Switching between backends
+
+The frontend ([fitstack-frontend](https://github.com/joonasKorhonen/fitstack-frontend)) reads `NEXT_PUBLIC_API_URL` to know which backend to talk to. Change one line in `.env.local` and restart the frontend:
+
+```bash
+# NestJS backend
+NEXT_PUBLIC_API_URL=http://localhost:3000
+
+# Laravel backend
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+Both backends share the same PostgreSQL database, so all data persists across switches.
+
+## API Overview
+
+All routes are mounted under `/api`.
+
+### Auth (`/auth`)
+
+| Method | Path               | Description                                              |
+| ------ | ------------------ | -------------------------------------------------------- |
+| POST   | `/register`        | Create account (`username`, `password`, optional `email`) |
+| POST   | `/login`           | Returns access token + sets refresh token cookie         |
+| POST   | `/refresh`         | Rotate refresh token, issue new access token             |
+| POST   | `/logout`          | Invalidate refresh token and blacklist access token      |
+| POST   | `/forgot-password` | Send reset link to verified email                        |
+| POST   | `/reset-password`  | Submit token + new password                              |
+
+### Users (`/users`) — JWT required
+
+| Method | Path       | Description                                          |
+| ------ | ---------- | ---------------------------------------------------- |
+| GET    | `/profile` | Current user                                         |
+| PATCH  | `/profile` | Update `username` or `email`                         |
+| DELETE | `/profile` | Delete account (also removes avatar from S3)         |
+| POST   | `/avatar`  | Upload profile picture (multipart, field `file`)     |
+| DELETE | `/avatar`  | Remove current avatar                                |
+
+### Workouts (`/workouts`) — JWT required
+
+CRUD for workouts and their sets, plus an endpoint to append sets to an existing workout.
+
+### Movements (`/movements`) — JWT required
+
+GET and POST for the user's custom exercise library.
+
+### Meals (`/meals`) — JWT required
+
+Full CRUD for meal entries with macronutrient fields.
+
+## Project Structure
+
+```
+app/
+├── Http/
+│   ├── Controllers/    AuthController, UserController, WorkoutController, MealController, MovementController
+│   ├── Middleware/     HandleCors
+│   └── Resources/      UserResource
+├── Models/             User, Workout, WorkoutSet, Meal, Movement, RefreshToken, PasswordResetToken
+database/
+└── migrations/         One migration per table matching the shared schema
+resources/views/
+└── emails/             reset-password.blade.php
+routes/
+└── api.php
+```
+
+## CI
+
+Every push and pull request to `main` runs via GitHub Actions:
+
+1. **Migrate** — applies migrations against a fresh PostgreSQL instance
+2. **Lint** — PHP syntax check across all source files
+3. **Test** — `php artisan test`
