@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\UserResource;
 use App\Models\PasswordResetToken;
-use App\Models\RefreshToken;
 use App\Models\User;
+use App\Services\RefreshTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -15,8 +15,9 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 
 class AuthController extends Controller
 {
-    private const REFRESH_TTL_DAYS = 7;
-    private const RESET_TTL_HOURS  = 1;
+    private const RESET_TTL_HOURS = 1;
+
+    public function __construct(private readonly RefreshTokenService $tokens) {}
 
     /**
      * Register a new user and return an access token + refresh token cookie.
@@ -41,7 +42,7 @@ class AuthController extends Controller
         ]);
 
         $accessToken = JWTAuth::fromUser($user);
-        $rawRefresh  = $this->issueRefreshToken($user);
+        $rawRefresh  = $this->tokens->issue($user);
 
         return response()
             ->json(['accessToken' => $accessToken, 'user' => new UserResource($user)], 201)
@@ -74,7 +75,7 @@ class AuthController extends Controller
         }
 
         $accessToken = JWTAuth::fromUser($user);
-        $rawRefresh  = $this->issueRefreshToken($user);
+        $rawRefresh  = $this->tokens->issue($user);
 
         return response()
             ->json(['accessToken' => $accessToken, 'user' => new UserResource($user)])
@@ -100,37 +101,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'No refresh token'], 401);
         }
 
-        $hashed = hash('sha256', $rawRefresh);
-        $stored = RefreshToken::where('token', $hashed)
-            ->where('expires_at', '>', now())
-            ->first();
+        $result = $this->tokens->rotate($rawRefresh);
 
-        if (! $stored) {
-            // A soft-deleted match means the token was already rotated,
-            // indicating possible theft — revoke the entire family.
-            $stolen = RefreshToken::withTrashed()->where('token', $hashed)->first();
-
-            if ($stolen) {
-                RefreshToken::withTrashed()
-                    ->where('token_family', $stolen->token_family)
-                    ->forceDelete();
-            }
-
+        if (! $result->succeeded) {
             return response()->json(['message' => 'Invalid refresh token'], 401);
         }
 
-        $user   = $stored->user;
-        $family = $stored->token_family;
-
-        // Soft-delete the consumed token so the theft check above can trace it
-        $stored->delete();
-
-        $newAccessToken = JWTAuth::fromUser($user);
-        $newRawRefresh  = $this->issueRefreshToken($user, $family);
+        $accessToken = JWTAuth::fromUser($result->user);
 
         return response()
-            ->json(['accessToken' => $newAccessToken])
-            ->cookie(...$this->refreshCookie($newRawRefresh));
+            ->json(['accessToken' => $accessToken])
+            ->cookie(...$this->refreshCookie($result->rawToken));
     }
 
     /**
@@ -146,7 +127,7 @@ class AuthController extends Controller
         $rawRefresh = $request->cookie('refresh_token');
 
         if ($rawRefresh) {
-            RefreshToken::where('token', hash('sha256', $rawRefresh))->forceDelete();
+            $this->tokens->revokeToken($rawRefresh);
         }
 
         // Blacklist the current access token so it cannot be reused until it expires
@@ -225,7 +206,7 @@ class AuthController extends Controller
         $user = $record->user;
         $user->update(['password' => $data['password']]);
 
-        RefreshToken::where('user_id', $user->id)->forceDelete();
+        $this->tokens->revokeAllForUser($user);
         $record->delete();
 
         // Blacklist the current access token if one was provided with this request
@@ -241,57 +222,21 @@ class AuthController extends Controller
     // ── private helpers ───────────────────────────────────────────────────────
 
     /**
-     * Persist a new refresh token for the user and return the raw (unhashed) value.
-     *
-     * @param  \App\Models\User  $user
-     * @param  string|null  $family  Existing family ID for rotation; null creates a new family.
-     * @return string  The raw (unhashed) refresh token to send in the cookie.
-     */
-    private function issueRefreshToken(User $user, ?string $family = null): string
-    {
-        $rawToken = Str::random(80);
-        $family   = $family ?? hash('sha256', $rawToken . $user->id . microtime());
-
-        RefreshToken::create([
-            'token'        => hash('sha256', $rawToken),
-            'token_family' => $family,
-            'user_id'      => $user->id,
-            'expires_at'   => now()->addDays(self::REFRESH_TTL_DAYS),
-        ]);
-
-        return $rawToken;
-    }
-
-    /**
-     * Build the argument list for response()->cookie() for the refresh token.
-     * Spreads directly into the cookie() call via the splat operator.
-     * The secure flag is enabled only in production.
-     *
-     * @param  string  $rawToken
-     * @return array{
-     *   0: string,
-     *   1: string,
-     *   2: int,
-     *   3: string,
-     *   4: null,
-     *   5: bool,
-     *   6: bool,
-     *   7: bool,
-     *   8: string
-     * }
+     * Build the argument list for response()->cookie() for the refresh token cookie.
+     * Secure flag is enabled only in production; httpOnly prevents JS access.
      */
     private function refreshCookie(string $rawToken): array
     {
         return [
-            'refresh_token',              // name
-            $rawToken,                    // value (raw token sent to the client)
-            self::REFRESH_TTL_DAYS * 24 * 60, // minutes until expiry
-            '/',                          // path
-            null,                         // domain (current domain)
-            app()->isProduction(),        // secure (HTTPS only in production)
-            true,                         // httpOnly (not accessible via JS)
-            false,                        // raw (do not URL-encode the value)
-            'Lax',                        // sameSite
+            'refresh_token',
+            $rawToken,
+            $this->tokens->ttlMinutes(),
+            '/',
+            null,
+            app()->isProduction(),
+            true,
+            false,
+            'Lax',
         ];
     }
 
