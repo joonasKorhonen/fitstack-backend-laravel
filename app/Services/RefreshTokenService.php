@@ -47,9 +47,9 @@ class RefreshTokenService
             ->first();
 
         if (! $stored) {
-            // Soft-deleted match means the token was already rotated — possible theft.
-            // Revoke the entire family to invalidate all derived tokens.
-            $stolen = RefreshToken::withTrashed()->where('token', $hashed)->first();
+            // onlyTrashed: an expired-but-unconsumed token must not trigger theft detection.
+            // Only a soft-deleted (consumed) token re-appearing indicates the raw value leaked.
+            $stolen = RefreshToken::onlyTrashed()->where('token', $hashed)->first();
 
             if ($stolen) {
                 RefreshToken::withTrashed()
