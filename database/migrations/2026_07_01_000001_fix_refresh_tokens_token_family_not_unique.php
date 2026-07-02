@@ -20,9 +20,11 @@ return new class extends Migration
             );
 
             if ($exists('RefreshToken_tokenFamily_key')) {
+                // Prisma creates a bare unique index (not a named constraint)
                 DB::statement('DROP INDEX "RefreshToken_tokenFamily_key"');
             } elseif ($exists('refresh_tokens_token_family_unique')) {
-                DB::statement('DROP INDEX "refresh_tokens_token_family_unique"');
+                // Laravel's ->unique() creates a constraint; must drop the constraint, not the index
+                DB::statement('ALTER TABLE refresh_tokens DROP CONSTRAINT "refresh_tokens_token_family_unique"');
             }
         } else {
             Schema::table('refresh_tokens', function (Blueprint $table) {
