@@ -12,7 +12,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('DROP INDEX "RefreshToken_tokenFamily_key"');
+        // Prisma uses its own index naming; Laravel/SQLite use the default convention
+        $index = DB::getDriverName() === 'pgsql'
+            ? '"RefreshToken_tokenFamily_key"'
+            : '"refresh_tokens_token_family_unique"';
+
+        DB::statement("DROP INDEX {$index}");
 
         Schema::table('refresh_tokens', function (Blueprint $table) {
             $table->index('token_family');
