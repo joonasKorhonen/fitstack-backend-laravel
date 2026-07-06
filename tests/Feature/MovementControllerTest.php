@@ -50,4 +50,58 @@ class MovementControllerTest extends TestCase
     {
         $this->getJson('/api/movements')->assertUnauthorized();
     }
+
+    // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_creates_movement_and_returns_201(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/movements', ['name' => 'Squat']);
+
+        $response->assertCreated()->assertJsonFragment(['name' => 'Squat', 'user_id' => $user->id]);
+        $this->assertDatabaseHas('movements', ['name' => 'Squat', 'user_id' => $user->id]);
+    }
+
+    public function test_store_rejects_duplicate_name_for_same_user(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+        $user->movements()->create(['name' => 'Squat']);
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/movements', ['name' => 'Squat']);
+
+        $response->assertUnprocessable()->assertJsonValidationErrors(['name']);
+    }
+
+    public function test_store_allows_same_name_for_different_users(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+        $other->movements()->create(['name' => 'Squat']);
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/movements', ['name' => 'Squat']);
+
+        $response->assertCreated();
+    }
+
+    public function test_store_validates_required_and_max_length(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/movements', [])
+            ->assertUnprocessable()->assertJsonValidationErrors(['name']);
+
+        $this->actingAs($user, 'api')->postJson('/api/movements', ['name' => str_repeat('a', 256)])
+            ->assertUnprocessable()->assertJsonValidationErrors(['name']);
+    }
+
+    public function test_store_requires_authentication(): void
+    {
+        $this->postJson('/api/movements', ['name' => 'Squat'])->assertUnauthorized();
+    }
 }
