@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class UserControllerTest extends TestCase
@@ -115,5 +116,61 @@ class UserControllerTest extends TestCase
     public function test_update_profile_requires_authentication(): void
     {
         $this->patchJson('/api/users/profile', ['username' => 'newname'])->assertUnauthorized();
+    }
+
+    // ── deleteProfile ─────────────────────────────────────────────────────────
+
+    public function test_delete_profile_removes_user_from_database(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
+            ->assertOk();
+
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
+    }
+
+    public function test_delete_profile_returns_success_message(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
+            ->assertOk()
+            ->assertJson(['message' => 'Account deleted']);
+    }
+
+    public function test_delete_profile_requires_authentication(): void
+    {
+        $this->deleteJson('/api/users/profile')->assertUnauthorized();
+    }
+
+    public function test_delete_profile_deletes_avatar_from_s3_when_present(): void
+    {
+        Storage::fake('s3');
+
+        /** @var User $user */
+        $user = User::factory()->create(['avatar_path' => 'avatars/test.jpg']);
+        Storage::disk('s3')->put('avatars/test.jpg', 'fake-image-content');
+
+        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
+            ->assertOk();
+
+        Storage::disk('s3')->assertMissing('avatars/test.jpg');
+    }
+
+    public function test_delete_profile_skips_s3_delete_when_no_avatar(): void
+    {
+        Storage::fake('s3');
+
+        /** @var User $user */
+        $user = User::factory()->create(['avatar_path' => null]);
+
+        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
+            ->assertOk()
+            ->assertJson(['message' => 'Account deleted']);
+
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 }
