@@ -78,10 +78,8 @@ class MovementControllerTest extends TestCase
     public function test_store_allows_same_name_for_different_users(): void
     {
         /** @var User $user */
-        $user  = User::factory()->create();
-        /** @var User $other */
-        $other = User::factory()->create();
-        $other->movements()->create(['name' => 'Squat']);
+        $user = User::factory()->create();
+        User::factory()->create()->movements()->create(['name' => 'Squat']);
 
         $response = $this->actingAs($user, 'api')->postJson('/api/movements', ['name' => 'Squat']);
 
