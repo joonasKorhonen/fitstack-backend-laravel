@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\MealController;
 use App\Http\Controllers\MovementController;
 use App\Http\Controllers\UserController;
@@ -8,11 +9,11 @@ use App\Http\Controllers\WorkoutController;
 
 // ── Auth (public) ─────────────────────────────────────────────────────────────
 Route::prefix('auth')->group(function () {
-    Route::post('register',         [AuthController::class, 'register']);
+    Route::post('register',         [AuthController::class, 'register'])->middleware('throttle:register');
     Route::post('login',            [AuthController::class, 'login']);
     Route::post('refresh',          [AuthController::class, 'refresh']);
     Route::post('logout',           [AuthController::class, 'logout']);
-    Route::post('forgot-password',  [AuthController::class, 'forgotPassword']);
+    Route::post('forgot-password',  [AuthController::class, 'forgotPassword'])->middleware('throttle:password-reset');
     Route::post('reset-password',   [AuthController::class, 'resetPassword']);
 });
 
@@ -24,7 +25,7 @@ Route::middleware('auth:api')->group(function () {
         Route::get('profile',    [UserController::class, 'profile']);
         Route::patch('profile',  [UserController::class, 'updateProfile']);
         Route::delete('profile', [UserController::class, 'deleteProfile']);
-        Route::post('avatar',    [UserController::class, 'uploadAvatar']);
+        Route::post('avatar',    [UserController::class, 'uploadAvatar'])->middleware('throttle:uploads');
         Route::delete('avatar',  [UserController::class, 'deleteAvatar']);
     });
 

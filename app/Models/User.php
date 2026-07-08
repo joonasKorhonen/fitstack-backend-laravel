@@ -33,7 +33,7 @@ class User extends Authenticatable implements JWTSubject
     {
         return Attribute::get(
             fn () => $this->avatar_path
-                ? Storage::disk('s3')->url($this->avatar_path)
+                ? Storage::disk('s3')->temporaryUrl($this->avatar_path, now()->addMinutes(15))
                 : null
         );
     }
