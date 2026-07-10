@@ -17,6 +17,9 @@ Route::prefix('auth')->group(function () {
     Route::post('reset-password',   [AuthController::class, 'resetPassword']);
 });
 
+// ── Health (public, no auth) ─────────────────────────────────────────────────
+Route::get('health', fn () => response()->json(['ok' => true]));
+
 // ── Protected routes (JWT required) ──────────────────────────────────────────
 Route::middleware('auth:api')->group(function () {
 
