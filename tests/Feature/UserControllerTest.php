@@ -259,4 +259,39 @@ class UserControllerTest extends TestCase
         $newPath = $user->fresh()->avatar_path;
         Storage::disk('s3')->assertExists($newPath);
     }
+
+    // ── deleteAvatar ──────────────────────────────────────────────────────────
+
+    public function test_delete_avatar_requires_authentication(): void
+    {
+        $this->deleteJson('/api/users/avatar')->assertUnauthorized();
+    }
+
+    public function test_delete_avatar_returns_404_when_no_avatar(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create(['avatar_path' => null]);
+
+        $this->actingAs($user, 'api')
+            ->deleteJson('/api/users/avatar')
+            ->assertNotFound()
+            ->assertJson(['message' => 'No avatar to delete']);
+    }
+
+    public function test_delete_avatar_removes_file_from_s3_and_clears_avatar_path(): void
+    {
+        Storage::fake('s3');
+
+        /** @var User $user */
+        $user = User::factory()->create(['avatar_path' => 'avatars/photo.jpg']);
+        Storage::disk('s3')->put('avatars/photo.jpg', 'image-content');
+
+        $this->actingAs($user, 'api')
+            ->deleteJson('/api/users/avatar')
+            ->assertOk()
+            ->assertJsonPath('avatarUrl', null);
+
+        Storage::disk('s3')->assertMissing('avatars/photo.jpg');
+        $this->assertNull($user->fresh()->avatar_path);
+    }
 }
