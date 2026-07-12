@@ -149,16 +149,16 @@ class UserControllerTest extends TestCase
 
     public function test_delete_profile_deletes_avatar_from_s3_when_present(): void
     {
-        Storage::fake('s3');
+        $disk = Storage::fake('s3');
 
         /** @var User $user */
         $user = User::factory()->create(['avatar_path' => 'avatars/test.jpg']);
-        Storage::disk('s3')->put('avatars/test.jpg', 'fake-image-content');
+        $disk->put('avatars/test.jpg', 'fake-image-content');
 
         $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
             ->assertOk();
 
-        Storage::disk('s3')->assertMissing('avatars/test.jpg');
+        $disk->assertMissing('avatars/test.jpg');
     }
 
     public function test_delete_profile_skips_s3_delete_when_no_avatar(): void
@@ -224,7 +224,7 @@ class UserControllerTest extends TestCase
 
     public function test_upload_avatar_stores_file_on_s3_and_returns_avatar_url(): void
     {
-        Storage::fake('s3');
+        $disk = Storage::fake('s3');
 
         /** @var User $user */
         $user = User::factory()->create();
@@ -238,16 +238,16 @@ class UserControllerTest extends TestCase
 
         $newPath = $user->fresh()->avatar_path;
         $this->assertNotNull($newPath);
-        Storage::disk('s3')->assertExists($newPath);
+        $disk->assertExists($newPath);
     }
 
     public function test_upload_avatar_replaces_old_avatar_on_s3(): void
     {
-        Storage::fake('s3');
+        $disk = Storage::fake('s3');
 
         /** @var User $user */
         $user = User::factory()->create(['avatar_path' => 'avatars/old.jpg']);
-        Storage::disk('s3')->put('avatars/old.jpg', 'old-image-content');
+        $disk->put('avatars/old.jpg', 'old-image-content');
 
         $file = UploadedFile::fake()->image('new-avatar.jpg');
 
@@ -255,9 +255,9 @@ class UserControllerTest extends TestCase
             ->postJson('/api/users/avatar', ['file' => $file])
             ->assertOk();
 
-        Storage::disk('s3')->assertMissing('avatars/old.jpg');
+        $disk->assertMissing('avatars/old.jpg');
         $newPath = $user->fresh()->avatar_path;
-        Storage::disk('s3')->assertExists($newPath);
+        $disk->assertExists($newPath);
     }
 
     // ── deleteAvatar ──────────────────────────────────────────────────────────
@@ -280,18 +280,18 @@ class UserControllerTest extends TestCase
 
     public function test_delete_avatar_removes_file_from_s3_and_clears_avatar_path(): void
     {
-        Storage::fake('s3');
+        $disk = Storage::fake('s3');
 
         /** @var User $user */
         $user = User::factory()->create(['avatar_path' => 'avatars/photo.jpg']);
-        Storage::disk('s3')->put('avatars/photo.jpg', 'image-content');
+        $disk->put('avatars/photo.jpg', 'image-content');
 
         $this->actingAs($user, 'api')
             ->deleteJson('/api/users/avatar')
             ->assertOk()
             ->assertJsonPath('avatarUrl', null);
 
-        Storage::disk('s3')->assertMissing('avatars/photo.jpg');
+        $disk->assertMissing('avatars/photo.jpg');
         $this->assertNull($user->fresh()->avatar_path);
     }
 }
