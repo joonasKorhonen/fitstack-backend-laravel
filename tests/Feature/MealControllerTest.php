@@ -102,4 +102,82 @@ class MealControllerTest extends TestCase
     {
         $this->getJson('/api/meals/1')->assertUnauthorized();
     }
+
+    // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_creates_meal_and_returns_201(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/meals', [
+            'title'    => 'Chicken Salad',
+            'calories' => 450,
+            'protein'  => 40,
+            'carbs'    => 20,
+            'fat'      => 15,
+            'notes'    => 'Post-workout meal',
+        ]);
+
+        $response->assertCreated()->assertJsonFragment([
+            'title'    => 'Chicken Salad',
+            'calories' => 450,
+            'protein'  => 40,
+            'carbs'    => 20,
+            'fat'      => 15,
+            'notes'    => 'Post-workout meal',
+        ]);
+
+        $this->assertDatabaseHas('meals', [
+            'user_id'  => $user->id,
+            'title'    => 'Chicken Salad',
+            'calories' => 450,
+        ]);
+    }
+
+    public function test_store_creates_meal_with_only_required_fields(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/meals', [
+            'title'    => 'Snack',
+            'calories' => 200,
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('meals', [
+            'user_id'  => $user->id,
+            'title'    => 'Snack',
+            'calories' => 200,
+        ]);
+    }
+
+    public function test_store_rejects_missing_required_fields(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/meals', [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['title', 'calories']);
+    }
+
+    public function test_store_rejects_negative_macro_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/meals', [
+            'title'    => 'Bad Meal',
+            'calories' => -100,
+            'protein'  => -5,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['calories', 'protein']);
+    }
+
+    public function test_store_requires_authentication(): void
+    {
+        $this->postJson('/api/meals', ['title' => 'Snack', 'calories' => 200])
+            ->assertUnauthorized();
+    }
 }
