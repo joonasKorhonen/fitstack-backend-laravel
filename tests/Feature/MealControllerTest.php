@@ -61,4 +61,45 @@ class MealControllerTest extends TestCase
     {
         $this->getJson('/api/meals')->assertUnauthorized();
     }
+
+    // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_show_returns_meal_belonging_to_authenticated_user(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $meal = $user->meals()->create(['title' => 'Oatmeal', 'calories' => 350]);
+
+        $this->actingAs($user, 'api')->getJson("/api/meals/{$meal->id}")
+            ->assertOk()
+            ->assertJsonFragment(['id' => $meal->id, 'title' => 'Oatmeal', 'calories' => 350]);
+    }
+
+    public function test_show_returns_404_for_another_users_meal(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $meal = $other->meals()->create(['title' => 'Pizza', 'calories' => 900]);
+
+        $this->actingAs($user, 'api')->getJson("/api/meals/{$meal->id}")
+            ->assertNotFound();
+    }
+
+    public function test_show_returns_404_for_nonexistent_meal(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->getJson('/api/meals/999999')
+            ->assertNotFound();
+    }
+
+    public function test_show_requires_authentication(): void
+    {
+        $this->getJson('/api/meals/1')->assertUnauthorized();
+    }
 }
