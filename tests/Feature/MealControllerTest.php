@@ -180,4 +180,77 @@ class MealControllerTest extends TestCase
         $this->postJson('/api/meals', ['title' => 'Snack', 'calories' => 200])
             ->assertUnauthorized();
     }
+
+    // ── update ────────────────────────────────────────────────────────────────
+
+    public function test_update_modifies_given_fields_and_keeps_others(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $meal = $user->meals()->create([
+            'title'    => 'Oatmeal',
+            'calories' => 350,
+            'protein'  => 12,
+        ]);
+
+        $response = $this->actingAs($user, 'api')->patchJson("/api/meals/{$meal->id}", [
+            'calories' => 400,
+        ]);
+
+        $response->assertOk()->assertJsonFragment([
+            'title'    => 'Oatmeal',
+            'calories' => 400,
+            'protein'  => 12,
+        ]);
+
+        $this->assertDatabaseHas('meals', [
+            'id'       => $meal->id,
+            'title'    => 'Oatmeal',
+            'calories' => 400,
+        ]);
+    }
+
+    public function test_update_returns_404_for_another_users_meal(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $meal = $other->meals()->create(['title' => 'Pizza', 'calories' => 900]);
+
+        $this->actingAs($user, 'api')->patchJson("/api/meals/{$meal->id}", ['calories' => 500])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('meals', ['id' => $meal->id, 'calories' => 900]);
+    }
+
+    public function test_update_returns_404_for_nonexistent_meal(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->patchJson('/api/meals/999999', ['calories' => 500])
+            ->assertNotFound();
+    }
+
+    public function test_update_rejects_invalid_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $meal = $user->meals()->create(['title' => 'Oatmeal', 'calories' => 350]);
+
+        $this->actingAs($user, 'api')->patchJson("/api/meals/{$meal->id}", [
+            'calories' => -1,
+            'title'    => str_repeat('a', 256),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['calories', 'title']);
+    }
+
+    public function test_update_requires_authentication(): void
+    {
+        $this->patchJson('/api/meals/1', ['calories' => 500])->assertUnauthorized();
+    }
 }
