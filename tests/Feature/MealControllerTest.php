@@ -253,4 +253,49 @@ class MealControllerTest extends TestCase
     {
         $this->patchJson('/api/meals/1', ['calories' => 500])->assertUnauthorized();
     }
+
+    // ── destroy ───────────────────────────────────────────────────────────────
+
+    public function test_destroy_deletes_meal_and_returns_success_message(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $meal = $user->meals()->create(['title' => 'Oatmeal', 'calories' => 350]);
+
+        $this->actingAs($user, 'api')->deleteJson("/api/meals/{$meal->id}")
+            ->assertOk()
+            ->assertJson(['message' => 'Meal deleted']);
+
+        $this->assertDatabaseMissing('meals', ['id' => $meal->id]);
+    }
+
+    public function test_destroy_returns_404_for_another_users_meal(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $meal = $other->meals()->create(['title' => 'Pizza', 'calories' => 900]);
+
+        $this->actingAs($user, 'api')->deleteJson("/api/meals/{$meal->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('meals', ['id' => $meal->id]);
+    }
+
+    public function test_destroy_returns_404_for_nonexistent_meal(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->deleteJson('/api/meals/999999')
+            ->assertNotFound();
+    }
+
+    public function test_destroy_requires_authentication(): void
+    {
+        $this->deleteJson('/api/meals/1')->assertUnauthorized();
+    }
 }
