@@ -81,4 +81,62 @@ class WorkoutControllerTest extends TestCase
     {
         $this->getJson('/api/workouts')->assertUnauthorized();
     }
+
+    // ── show ──────────────────────────────────────────────────────────────────
+
+    public function test_show_returns_workout_belonging_to_authenticated_user(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->getJson("/api/workouts/{$workout->id}")
+            ->assertOk()
+            ->assertJsonFragment(['id' => $workout->id, 'exercise' => 'Squat', 'reps' => 5]);
+    }
+
+    public function test_show_includes_sets_with_their_movement(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $movement = $user->movements()->create(['name' => 'Back Squat']);
+        $workout  = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $workout->sets()->create(['movement_id' => $movement->id, 'reps' => 5, 'weight' => 100]);
+
+        $response = $this->actingAs($user, 'api')->getJson("/api/workouts/{$workout->id}");
+
+        $response->assertOk();
+        $sets = $response->json('sets');
+        $this->assertCount(1, $sets);
+        $this->assertSame('Back Squat', $sets[0]['movement']['name']);
+    }
+
+    public function test_show_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->getJson("/api/workouts/{$workout->id}")
+            ->assertNotFound();
+    }
+
+    public function test_show_returns_404_for_nonexistent_workout(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->getJson('/api/workouts/999999')
+            ->assertNotFound();
+    }
+
+    public function test_show_requires_authentication(): void
+    {
+        $this->getJson('/api/workouts/1')->assertUnauthorized();
+    }
 }
