@@ -72,8 +72,11 @@ class WorkoutController extends Controller
             'sets.*.notes'      => 'nullable|string',
         ]);
 
-        $sets      = $data['sets'] ?? [];
-        $firstSet  = $sets[0] ?? [];
+        $sets = $data['sets'] ?? [];
+        // Validation rebuilds the sets array rule-by-rule, so numeric keys can
+        // come back out of order when earlier sets omit fields later sets have.
+        ksort($sets);
+        $firstSet = $sets[0] ?? [];
 
         // Derive top-level fields from the first set when not explicitly provided
         $exercise = $data['exercise'] ?? ($firstSet['exercise'] ?? 'Movement');
@@ -168,7 +171,12 @@ class WorkoutController extends Controller
             'sets.*.notes'      => 'nullable|string',
         ]);
 
-        foreach ($data['sets'] as $setData) {
+        $sets = $data['sets'];
+        // Validation rebuilds the sets array rule-by-rule, so numeric keys can
+        // come back out of order when earlier sets omit fields later sets have.
+        ksort($sets);
+
+        foreach ($sets as $setData) {
             $workout->sets()->create([
                 'exercise'    => $setData['exercise'] ?? null,
                 'movement_id' => $setData['movementId'] ?? null,

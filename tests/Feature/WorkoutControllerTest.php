@@ -139,4 +139,141 @@ class WorkoutControllerTest extends TestCase
     {
         $this->getJson('/api/workouts/1')->assertUnauthorized();
     }
+
+    // ── store ─────────────────────────────────────────────────────────────────
+
+    public function test_store_creates_workout_with_sets_and_returns_201(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $movement = $user->movements()->create(['name' => 'Back Squat']);
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/workouts', [
+            'date'  => '2026-07-18 10:00:00',
+            'notes' => 'Leg day',
+            'sets'  => [
+                ['movementId' => $movement->id, 'reps' => 5, 'weight' => 100, 'intensity' => 8],
+                ['exercise' => 'Front Squat', 'reps' => 8, 'weight' => 60],
+            ],
+        ]);
+
+        $response->assertCreated()->assertJsonFragment(['notes' => 'Leg day']);
+
+        $sets = $response->json('sets');
+        $this->assertCount(2, $sets);
+        $this->assertSame('Back Squat', $sets[0]['movement']['name']);
+        $this->assertSame('Front Squat', $sets[1]['exercise']);
+
+        $this->assertDatabaseHas('workouts', [
+            'user_id' => $user->id,
+            'notes'   => 'Leg day',
+        ]);
+        $this->assertDatabaseHas('workout_sets', [
+            'workout_id'  => $response->json('id'),
+            'movement_id' => $movement->id,
+            'reps'        => 5,
+            'intensity'   => 8,
+        ]);
+    }
+
+    public function test_store_derives_top_level_fields_from_first_set(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/workouts', [
+            'sets' => [
+                ['exercise' => 'Deadlift', 'reps' => 3, 'weight' => 140],
+                ['exercise' => 'Row', 'reps' => 10, 'weight' => 70],
+            ],
+        ]);
+
+        $response->assertCreated()->assertJsonFragment([
+            'exercise' => 'Deadlift',
+            'reps'     => 3,
+            'weight'   => 140,
+        ]);
+    }
+
+    public function test_store_explicit_fields_override_first_set_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/workouts', [
+            'exercise' => 'Custom Name',
+            'reps'     => 99,
+            'sets'     => [
+                ['exercise' => 'Deadlift', 'reps' => 3, 'weight' => 140],
+            ],
+        ]);
+
+        $response->assertCreated()->assertJsonFragment([
+            'exercise' => 'Custom Name',
+            'reps'     => 99,
+        ]);
+    }
+
+    public function test_store_uses_defaults_when_no_fields_given(): void
+    {
+        // NestJS compatibility: an empty payload creates a placeholder workout.
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user, 'api')->postJson('/api/workouts', []);
+
+        $response->assertCreated()->assertJsonFragment([
+            'exercise' => 'Movement',
+            'reps'     => 0,
+            'weight'   => null,
+        ]);
+        $this->assertNotNull($response->json('date'));
+        $this->assertSame([], $response->json('sets'));
+    }
+
+    public function test_store_rejects_empty_sets_array(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/workouts', ['sets' => []])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sets']);
+    }
+
+    public function test_store_rejects_set_without_reps(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/workouts', [
+            'sets' => [['exercise' => 'Deadlift', 'weight' => 140]],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['sets.0.reps']);
+    }
+
+    public function test_store_rejects_invalid_set_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $this->actingAs($user, 'api')->postJson('/api/workouts', [
+            'sets' => [
+                ['reps' => -1, 'weight' => -5, 'intensity' => 11, 'movementId' => 999999],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'sets.0.reps',
+                'sets.0.weight',
+                'sets.0.intensity',
+                'sets.0.movementId',
+            ]);
+    }
+
+    public function test_store_requires_authentication(): void
+    {
+        $this->postJson('/api/workouts', ['sets' => [['reps' => 5]]])
+            ->assertUnauthorized();
+    }
 }
