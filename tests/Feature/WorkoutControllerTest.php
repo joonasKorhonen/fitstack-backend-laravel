@@ -276,4 +276,77 @@ class WorkoutControllerTest extends TestCase
         $this->postJson('/api/workouts', ['sets' => [['reps' => 5]]])
             ->assertUnauthorized();
     }
+
+    // ── update ────────────────────────────────────────────────────────────────
+
+    public function test_update_modifies_given_fields_and_keeps_others(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create([
+            'exercise' => 'Squat',
+            'reps'     => 5,
+            'weight'   => 100,
+            'date'     => now(),
+        ]);
+        $workout->sets()->create(['exercise' => 'Squat', 'reps' => 5, 'weight' => 100]);
+
+        $response = $this->actingAs($user, 'api')->patchJson("/api/workouts/{$workout->id}", [
+            'reps'  => 8,
+            'notes' => 'Felt strong',
+        ]);
+
+        $response->assertOk()->assertJsonFragment([
+            'exercise' => 'Squat',
+            'reps'     => 8,
+            'weight'   => 100,
+            'notes'    => 'Felt strong',
+        ]);
+        // Sets are untouched by update and still present in the response.
+        $this->assertCount(1, $response->json('sets'));
+
+        $this->assertDatabaseHas('workouts', [
+            'id'       => $workout->id,
+            'exercise' => 'Squat',
+            'reps'     => 8,
+            'notes'    => 'Felt strong',
+        ]);
+    }
+
+    public function test_update_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->patchJson("/api/workouts/{$workout->id}", ['reps' => 1])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workouts', ['id' => $workout->id, 'reps' => 8]);
+    }
+
+    public function test_update_rejects_invalid_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->patchJson("/api/workouts/{$workout->id}", [
+            'date'     => 'not-a-date',
+            'exercise' => str_repeat('a', 256),
+            'reps'     => -1,
+            'weight'   => -5,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['date', 'exercise', 'reps', 'weight']);
+    }
+
+    public function test_update_requires_authentication(): void
+    {
+        $this->patchJson('/api/workouts/1', ['reps' => 1])->assertUnauthorized();
+    }
 }
