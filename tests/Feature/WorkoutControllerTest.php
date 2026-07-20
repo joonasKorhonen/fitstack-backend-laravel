@@ -330,4 +330,42 @@ class WorkoutControllerTest extends TestCase
     {
         $this->patchJson('/api/workouts/1', ['reps' => 1])->assertUnauthorized();
     }
+
+    // ── destroy ───────────────────────────────────────────────────────────────
+
+    public function test_destroy_deletes_workout_and_cascades_to_sets(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $set     = $workout->sets()->create(['exercise' => 'Squat', 'reps' => 5]);
+
+        $this->actingAs($user, 'api')->deleteJson("/api/workouts/{$workout->id}")
+            ->assertOk()
+            ->assertJson(['message' => 'Workout deleted']);
+
+        $this->assertDatabaseMissing('workouts', ['id' => $workout->id]);
+        $this->assertDatabaseMissing('workout_sets', ['id' => $set->id]);
+    }
+
+    public function test_destroy_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->deleteJson("/api/workouts/{$workout->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workouts', ['id' => $workout->id]);
+    }
+
+    public function test_destroy_requires_authentication(): void
+    {
+        $this->deleteJson('/api/workouts/1')->assertUnauthorized();
+    }
 }
