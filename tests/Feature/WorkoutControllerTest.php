@@ -368,4 +368,86 @@ class WorkoutControllerTest extends TestCase
     {
         $this->deleteJson('/api/workouts/1')->assertUnauthorized();
     }
+
+    // ── addSets ───────────────────────────────────────────────────────────────
+
+    public function test_add_sets_appends_to_workout_preserving_order_and_movement(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $movement = $user->movements()->create(['name' => 'Back Squat']);
+        $workout  = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $workout->sets()->create(['exercise' => 'Warmup', 'reps' => 10]);
+
+        // First set omits 'exercise', second includes it — the shape that previously
+        // triggered validated() to reorder sets before they were persisted.
+        $response = $this->actingAs($user, 'api')->postJson("/api/workouts/{$workout->id}/sets", [
+            'sets' => [
+                ['movementId' => $movement->id, 'reps' => 5, 'weight' => 100],
+                ['exercise' => 'Front Squat', 'reps' => 8],
+            ],
+        ]);
+
+        $response->assertCreated();
+        $sets = $response->json('sets');
+        $this->assertCount(3, $sets);
+        $this->assertSame('Warmup', $sets[0]['exercise']);
+        $this->assertSame('Back Squat', $sets[1]['movement']['name']);
+        $this->assertSame('Front Squat', $sets[2]['exercise']);
+    }
+
+    public function test_add_sets_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->postJson("/api/workouts/{$workout->id}/sets", [
+            'sets' => [['reps' => 5]],
+        ])->assertNotFound();
+
+        $this->assertDatabaseCount('workout_sets', 0);
+    }
+
+    public function test_add_sets_rejects_missing_sets(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->postJson("/api/workouts/{$workout->id}/sets", [])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['sets']);
+    }
+
+    public function test_add_sets_rejects_invalid_set_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+
+        $this->actingAs($user, 'api')->postJson("/api/workouts/{$workout->id}/sets", [
+            'sets' => [
+                ['reps' => -1, 'weight' => -5, 'intensity' => 11, 'movementId' => 999999],
+            ],
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors([
+                'sets.0.reps',
+                'sets.0.weight',
+                'sets.0.intensity',
+                'sets.0.movementId',
+            ]);
+    }
+
+    public function test_add_sets_requires_authentication(): void
+    {
+        $this->postJson('/api/workouts/1/sets', ['sets' => [['reps' => 5]]])
+            ->assertUnauthorized();
+    }
 }
