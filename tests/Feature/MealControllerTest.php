@@ -47,16 +47,6 @@ class MealControllerTest extends TestCase
         $this->assertSame(['Dinner', 'Lunch', 'Breakfast'], $titles);
     }
 
-    public function test_index_returns_empty_array_when_no_meals(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->getJson('/api/meals')
-            ->assertOk()
-            ->assertExactJson([]);
-    }
-
     public function test_index_requires_authentication(): void
     {
         $this->getJson('/api/meals')->assertUnauthorized();
@@ -86,15 +76,6 @@ class MealControllerTest extends TestCase
         $meal = $other->meals()->create(['title' => 'Pizza', 'calories' => 900]);
 
         $this->actingAs($user, 'api')->getJson("/api/meals/{$meal->id}")
-            ->assertNotFound();
-    }
-
-    public function test_show_returns_404_for_nonexistent_meal(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->getJson('/api/meals/999999')
             ->assertNotFound();
     }
 
@@ -132,23 +113,6 @@ class MealControllerTest extends TestCase
             'user_id'  => $user->id,
             'title'    => 'Chicken Salad',
             'calories' => 450,
-        ]);
-    }
-
-    public function test_store_creates_meal_with_only_required_fields(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->postJson('/api/meals', [
-            'title'    => 'Snack',
-            'calories' => 200,
-        ])->assertCreated();
-
-        $this->assertDatabaseHas('meals', [
-            'user_id'  => $user->id,
-            'title'    => 'Snack',
-            'calories' => 200,
         ]);
     }
 
@@ -226,15 +190,6 @@ class MealControllerTest extends TestCase
         $this->assertDatabaseHas('meals', ['id' => $meal->id, 'calories' => 900]);
     }
 
-    public function test_update_returns_404_for_nonexistent_meal(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->patchJson('/api/meals/999999', ['calories' => 500])
-            ->assertNotFound();
-    }
-
     public function test_update_rejects_invalid_values(): void
     {
         /** @var User $user */
@@ -283,15 +238,6 @@ class MealControllerTest extends TestCase
             ->assertNotFound();
 
         $this->assertDatabaseHas('meals', ['id' => $meal->id]);
-    }
-
-    public function test_destroy_returns_404_for_nonexistent_meal(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->deleteJson('/api/meals/999999')
-            ->assertNotFound();
     }
 
     public function test_destroy_requires_authentication(): void

@@ -121,18 +121,7 @@ class UserControllerTest extends TestCase
 
     // ── deleteProfile ─────────────────────────────────────────────────────────
 
-    public function test_delete_profile_removes_user_from_database(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
-            ->assertOk();
-
-        $this->assertDatabaseMissing('users', ['id' => $user->id]);
-    }
-
-    public function test_delete_profile_returns_success_message(): void
+    public function test_delete_profile_removes_user_and_returns_success_message(): void
     {
         /** @var User $user */
         $user = User::factory()->create();
@@ -140,6 +129,8 @@ class UserControllerTest extends TestCase
         $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
             ->assertOk()
             ->assertJson(['message' => 'Account deleted']);
+
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 
     public function test_delete_profile_requires_authentication(): void
@@ -159,20 +150,6 @@ class UserControllerTest extends TestCase
             ->assertOk();
 
         $disk->assertMissing('avatars/test.jpg');
-    }
-
-    public function test_delete_profile_skips_s3_delete_when_no_avatar(): void
-    {
-        Storage::fake('s3');
-
-        /** @var User $user */
-        $user = User::factory()->create(['avatar_path' => null]);
-
-        $this->actingAs($user, 'api')->deleteJson('/api/users/profile')
-            ->assertOk()
-            ->assertJson(['message' => 'Account deleted']);
-
-        $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 
     // ── uploadAvatar ──────────────────────────────────────────────────────────

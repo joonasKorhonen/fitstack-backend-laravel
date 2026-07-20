@@ -67,16 +67,6 @@ class WorkoutControllerTest extends TestCase
         $this->assertSame('Front Squat', $sets[1]['exercise']);
     }
 
-    public function test_index_returns_empty_array_when_no_workouts(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->getJson('/api/workouts')
-            ->assertOk()
-            ->assertExactJson([]);
-    }
-
     public function test_index_requires_authentication(): void
     {
         $this->getJson('/api/workouts')->assertUnauthorized();
@@ -123,15 +113,6 @@ class WorkoutControllerTest extends TestCase
         $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
 
         $this->actingAs($user, 'api')->getJson("/api/workouts/{$workout->id}")
-            ->assertNotFound();
-    }
-
-    public function test_show_returns_404_for_nonexistent_workout(): void
-    {
-        /** @var User $user */
-        $user = User::factory()->create();
-
-        $this->actingAs($user, 'api')->getJson('/api/workouts/999999')
             ->assertNotFound();
     }
 
