@@ -450,4 +450,121 @@ class WorkoutControllerTest extends TestCase
         $this->postJson('/api/workouts/1/sets', ['sets' => [['reps' => 5]]])
             ->assertUnauthorized();
     }
+
+    // ── updateSet ─────────────────────────────────────────────────────────────
+
+    public function test_update_set_modifies_given_field_and_preserves_omitted_ones(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $movement = $user->movements()->create(['name' => 'Back Squat']);
+        $workout  = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $set      = $workout->sets()->create([
+            'movement_id' => $movement->id,
+            'reps'        => 5,
+            'weight'      => 100,
+            'intensity'   => 8,
+        ]);
+
+        $response = $this->actingAs($user, 'api')
+            ->patchJson("/api/workouts/{$workout->id}/sets/{$set->id}", ['reps' => 8]);
+
+        $response->assertOk()->assertJsonFragment([
+            'id'          => $set->id,
+            'reps'        => 8,
+            'movement_id' => $movement->id,
+            'weight'      => 100,
+            'intensity'   => 8,
+        ]);
+        $this->assertSame('Back Squat', $response->json('movement.name'));
+    }
+
+    public function test_update_set_clears_nullable_fields_with_explicit_null(): void
+    {
+        // The array_key_exists branch: an explicit null must overwrite the value,
+        // distinguishing it from an omitted field (which is preserved above).
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $movement = $user->movements()->create(['name' => 'Back Squat']);
+        $workout  = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $set      = $workout->sets()->create([
+            'movement_id' => $movement->id,
+            'reps'        => 5,
+            'weight'      => 100,
+            'intensity'   => 8,
+        ]);
+
+        $response = $this->actingAs($user, 'api')
+            ->patchJson("/api/workouts/{$workout->id}/sets/{$set->id}", [
+                'movementId' => null,
+                'weight'     => null,
+                'intensity'  => null,
+            ]);
+
+        $response->assertOk();
+        $this->assertNull($response->json('movement_id'));
+        $this->assertNull($response->json('movement'));
+        $this->assertNull($response->json('weight'));
+        $this->assertNull($response->json('intensity'));
+    }
+
+    public function test_update_set_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+        $set     = $workout->sets()->create(['exercise' => 'Bench Press', 'reps' => 8]);
+
+        $this->actingAs($user, 'api')
+            ->patchJson("/api/workouts/{$workout->id}/sets/{$set->id}", ['reps' => 1])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workout_sets', ['id' => $set->id, 'reps' => 8]);
+    }
+
+    public function test_update_set_returns_404_for_set_belonging_to_another_workout(): void
+    {
+        // Set lookup is scoped to the workout: a set the user owns but that lives
+        // under a different workout must not be reachable via this workout's id.
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workoutA = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $workoutB = $user->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+        $set      = $workoutB->sets()->create(['exercise' => 'Bench Press', 'reps' => 8]);
+
+        $this->actingAs($user, 'api')
+            ->patchJson("/api/workouts/{$workoutA->id}/sets/{$set->id}", ['reps' => 1])
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workout_sets', ['id' => $set->id, 'reps' => 8]);
+    }
+
+    public function test_update_set_rejects_invalid_values(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $set     = $workout->sets()->create(['exercise' => 'Squat', 'reps' => 5]);
+
+        $this->actingAs($user, 'api')
+            ->patchJson("/api/workouts/{$workout->id}/sets/{$set->id}", [
+                'reps'       => -1,
+                'weight'     => -5,
+                'intensity'  => 11,
+                'movementId' => 999999,
+            ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['reps', 'weight', 'intensity', 'movementId']);
+    }
+
+    public function test_update_set_requires_authentication(): void
+    {
+        $this->patchJson('/api/workouts/1/sets/1', ['reps' => 1])->assertUnauthorized();
+    }
 }
