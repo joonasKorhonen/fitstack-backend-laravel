@@ -192,7 +192,14 @@ class WorkoutController extends Controller
 
     /**
      * Update a specific set within a workout owned by the authenticated user.
-     * Uses array_key_exists checks so explicit null values are preserved.
+     *
+     * movementId, weight, intensity and notes use array_key_exists, so an explicit
+     * null clears them while an omitted field is preserved. exercise and reps use a
+     * ?? fallback instead: an explicit null keeps the existing value rather than
+     * clearing it, so exercise cannot be nulled out this way (reps is non-nullable,
+     * so the distinction is moot there). The frontend never sends exercise, nor a
+     * null for any field, when updating a set, so this asymmetry is unreachable via
+     * the frontend (a direct API call could still send exercise: null and hit it).
      *
      * PATCH /api/workouts/{workoutId}/sets/{setId}
      *
