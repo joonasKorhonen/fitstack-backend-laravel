@@ -567,4 +567,62 @@ class WorkoutControllerTest extends TestCase
     {
         $this->patchJson('/api/workouts/1/sets/1', ['reps' => 1])->assertUnauthorized();
     }
+
+    // ── destroySet ────────────────────────────────────────────────────────────
+
+    public function test_destroy_set_deletes_the_set_and_returns_success_message(): void
+    {
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workout = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $set     = $workout->sets()->create(['exercise' => 'Squat', 'reps' => 5]);
+
+        $this->actingAs($user, 'api')
+            ->deleteJson("/api/workouts/{$workout->id}/sets/{$set->id}")
+            ->assertOk()
+            ->assertJson(['message' => 'Set deleted']);
+
+        $this->assertDatabaseMissing('workout_sets', ['id' => $set->id]);
+    }
+
+    public function test_destroy_set_returns_404_for_another_users_workout(): void
+    {
+        /** @var User $user */
+        $user  = User::factory()->create();
+        /** @var User $other */
+        $other = User::factory()->create();
+
+        $workout = $other->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+        $set     = $workout->sets()->create(['exercise' => 'Bench Press', 'reps' => 8]);
+
+        $this->actingAs($user, 'api')
+            ->deleteJson("/api/workouts/{$workout->id}/sets/{$set->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workout_sets', ['id' => $set->id]);
+    }
+
+    public function test_destroy_set_returns_404_for_set_belonging_to_another_workout(): void
+    {
+        // Set lookup is scoped to the workout: a set the user owns but that lives
+        // under a different workout must not be reachable via this workout's id.
+        /** @var User $user */
+        $user = User::factory()->create();
+
+        $workoutA = $user->workouts()->create(['exercise' => 'Squat', 'reps' => 5, 'date' => now()]);
+        $workoutB = $user->workouts()->create(['exercise' => 'Bench Press', 'reps' => 8, 'date' => now()]);
+        $set      = $workoutB->sets()->create(['exercise' => 'Bench Press', 'reps' => 8]);
+
+        $this->actingAs($user, 'api')
+            ->deleteJson("/api/workouts/{$workoutA->id}/sets/{$set->id}")
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('workout_sets', ['id' => $set->id]);
+    }
+
+    public function test_destroy_set_requires_authentication(): void
+    {
+        $this->deleteJson('/api/workouts/1/sets/1')->assertUnauthorized();
+    }
 }
