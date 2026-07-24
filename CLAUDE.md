@@ -21,7 +21,7 @@ composer test   # also clears config cache first
 
 # Run a single test class or method
 php artisan test --filter WorkoutControllerTest
-php artisan test tests/Feature/ExampleTest.php
+php artisan test tests/Feature/MealControllerTest.php
 
 # Lint (PHP syntax check — matches CI)
 find app routes config database -name "*.php" | xargs php -l
@@ -36,6 +36,14 @@ php artisan migrate
 php artisan key:generate
 php artisan jwt:secret
 ```
+
+## Commit messages
+
+Plain imperative subject line, **no type prefix** — this matches the existing history.
+
+- Start the subject with a capitalized imperative verb (`Add`, `Remove`, `Fix`, `Clarify`) describing what the commit does. Do **not** use Conventional Commit prefixes (`fix:`, `feat:`, `chore:`, …).
+- Keep the subject concise and specific — say what changed and, when it fits, the effect: e.g. `Add feature tests for MealController destroy endpoint`, `Clarify updateSet docblock on null-handling asymmetry`.
+- For anything non-trivial, add a body (blank line, then wrapped ~72 chars) explaining the *why* and the mechanism — the failure it fixes or the contract it relies on — not a restatement of the diff.
 
 ## Architecture
 
